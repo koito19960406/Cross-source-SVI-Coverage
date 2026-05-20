@@ -16,7 +16,7 @@ from streetlevel.kakao.api import build_find_panoramas_request_url
 from streetlevel.kakao.parse import parse_panoramas
 
 from coverage_acquisition.models import BoundingBox, ProviderDefinition, SourceDefinition
-from coverage_acquisition.polite import polite_fetch
+from coverage_acquisition.polite import PolitePolicy, polite_fetch
 from coverage_acquisition.providers._registry import register_provider
 from coverage_acquisition.source_kinds.streetlevel import ProbeBlockedError, register_streetlevel_probe
 
@@ -34,6 +34,7 @@ KAKAO_HEADERS = {
     "Accept": "application/json",
     "Referer": "https://map.kakao.com/",
 }
+KAKAO_POLITE_POLICY = PolitePolicy(min_interval_seconds=0.0, user_agent=KAKAO_PROBE_CONFIG.user_agent)
 
 
 def build_kakao_query_url(lat: float, lon: float, radius_m: float, limit: int = 100) -> str:
@@ -49,7 +50,7 @@ def build_kakao_query_url(lat: float, lon: float, radius_m: float, limit: int = 
 def probe_kakao_coverage(lat: float, lon: float, radius_m: float) -> list[dict]:
     """Probe Kakao Road View coverage near one WGS84 point."""
     url = build_kakao_query_url(lat=lat, lon=lon, radius_m=radius_m, limit=KAKAO_PROBE_CONFIG.limit)
-    payload, content_type, _status = polite_fetch(url, headers=KAKAO_HEADERS)
+    payload, content_type, _status = polite_fetch(url, headers=KAKAO_HEADERS, policy=KAKAO_POLITE_POLICY)
     if not content_type.startswith("application/json"):
         raise ProbeBlockedError(f"Kakao probe returned unexpected content type: {content_type!r}")
     return decode_kakao_panoramas(payload)

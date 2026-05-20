@@ -74,6 +74,22 @@ def test_kakao_decode_coverage(monkeypatch):
     assert bool(panos) is True
 
 
+def test_kakao_probe_disables_redundant_polite_host_gate(monkeypatch):
+    import coverage_acquisition.providers.kakao as kakao
+
+    captured = {}
+
+    def fake_polite_fetch(*args, **kwargs):
+        captured["policy"] = kwargs["policy"]
+        return fixture_bytes("nodes_seoul.json"), "application/json", 200
+
+    monkeypatch.setattr(kakao, "polite_fetch", fake_polite_fetch)
+
+    get_streetlevel_probe("kakao")(37.5663, 126.9779, 50)
+
+    assert captured["policy"].min_interval_seconds == 0.0
+
+
 def test_kakao_decode_empty(monkeypatch):
     import coverage_acquisition.providers.kakao as kakao
 

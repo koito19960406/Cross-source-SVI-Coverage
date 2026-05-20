@@ -252,17 +252,16 @@ def test_naver_discovery_raises_probe_blocked_on_undecodable(monkeypatch):
         naver_provider.probe_naver(37.4979, 127.0276, 100.0)
 
 
-def test_naver_get_neighbors_flood_fill_is_throttled(monkeypatch):
-    import time
-
+def test_naver_get_neighbors_flood_fill_uses_configurable_throttle(monkeypatch):
     import streetlevel.naver.api as naver_api
 
     import coverage_acquisition.providers.naver as naver_provider
 
-    call_times: list[float] = []
+    waited_intervals: list[float] = []
+    neighbor_calls: list[str] = []
 
     def fake_get_neighbors(panoid: str, session=None):
-        call_times.append(time.monotonic())
+        neighbor_calls.append(panoid)
         if panoid == "seed":
             return {
                 "panoramas": {
@@ -297,12 +296,12 @@ def test_naver_get_neighbors_flood_fill_is_throttled(monkeypatch):
         },
     )
     monkeypatch.setattr(naver_api, "get_neighbors", fake_get_neighbors)
-    monkeypatch.setattr(naver_provider, "GET_NEIGHBORS_MIN_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setitem(naver_provider.PROVIDER.sources[0].options, "get_neighbors_per_second", 20.0)
+    monkeypatch.setattr(naver_provider._NEIGHBOR_THROTTLE, "wait", waited_intervals.append)
 
     naver_provider.probe_naver(37.5, 127.0, 100.0)
 
     # seed + east + west = 3 get_neighbors calls; consecutive calls must be
-    # spaced by at least the configured throttle interval.
-    assert len(call_times) == 3
-    gaps = [call_times[i + 1] - call_times[i] for i in range(len(call_times) - 1)]
-    assert all(gap >= 0.05 * 0.8 for gap in gaps), gaps
+    # gated by the configured per-neighbor throttle interval.
+    assert neighbor_calls == ["seed", "east", "west"]
+    assert waited_intervals == [0.05, 0.05, 0.05]

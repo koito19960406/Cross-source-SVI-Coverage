@@ -33,10 +33,10 @@ STREETLEVEL_PANORAMA_TYPES = {
     int(PanoramaType.MESH_EQUIRECT),
 }
 DEFAULT_FRONTIER_CAP = 256
+DEFAULT_GET_NEIGHBORS_PER_SECOND = 1.0
 
 # The flood-fill can fire up to DEFAULT_FRONTIER_CAP get_neighbors calls per
 # probe; throttle every one of them so the burst stays a polite scrape.
-GET_NEIGHBORS_MIN_INTERVAL_SECONDS = 1.0
 
 
 class _NeighborThrottle:
@@ -94,11 +94,11 @@ PROVIDER = ProviderDefinition(
             options={
                 "streetlevel_module": "naver",
                 "streetlevel_type_allowlist": (3, 4, 13, 15),
+                "get_neighbors_per_second": DEFAULT_GET_NEIGHBORS_PER_SECOND,
                 "discovery": {
                     "posture": "option_b_minimize_map_naver_seed_calls",
                     "seed_grid_spacing_m": 300.0,
                     "frontier_cap": DEFAULT_FRONTIER_CAP,
-                    "min_interval_seconds": 1.0,
                     "max_retries": 3,
                     "bulk_endpoint_host": "panorama.map.naver.com",
                 },
@@ -170,7 +170,7 @@ def probe_naver(lat: float, lon: float, radius_m: float) -> list[dict]:
         if panoid in expanded:
             continue
         expanded.add(panoid)
-        _NEIGHBOR_THROTTLE.wait(GET_NEIGHBORS_MIN_INTERVAL_SECONDS)
+        _NEIGHBOR_THROTTLE.wait(_get_neighbors_min_interval_seconds())
         try:
             neighbors = _get_neighbors(panoid)
         except AssertionError:
@@ -184,6 +184,15 @@ def probe_naver(lat: float, lon: float, radius_m: float) -> list[dict]:
             _add_pano(pano, records, frontier)
 
     return list(records.values())
+
+
+def _get_neighbors_min_interval_seconds() -> float:
+    requests_per_second = float(
+        PROVIDER.sources[0].options.get("get_neighbors_per_second", DEFAULT_GET_NEIGHBORS_PER_SECOND)
+    )
+    if requests_per_second <= 0:
+        raise ValueError("get_neighbors_per_second must be positive.")
+    return 1.0 / requests_per_second
 
 
 def _add_pano(pano: NaverPanorama, records: dict[str, dict], frontier: deque[str]) -> None:
